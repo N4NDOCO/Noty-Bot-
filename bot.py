@@ -1,75 +1,75 @@
 import discord
 from discord.ext import commands
 import random
-from config import (
-    TOKEN,
-    GUILD_ID,
-    CALL_CHANNEL_ID,
-    ROLE_ENTREGADOR_NAME,
-    CATEGORY_NAME
-)
+import os
+
+TOKEN = os.environ.get("TOKEN")
+
+GUILD_ID = 1465477542919016625
+CALL_CHANNEL_ID = 1465657430292697151  # ✅┃escolha-e-pagamentos
+ENTREGADOR_ROLE_NAME = "Entregador"
 
 intents = discord.Intents.default()
-intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 @bot.event
 async def on_ready():
-    print("Call Listener Bot online!")
+    print("Call Ticket Bot online!")
 
 @bot.event
-async def on_message(message):
-
-    if message.author.bot:
+async def on_interaction(interaction: discord.Interaction):
+    # só slash commands
+    if interaction.type != discord.InteractionType.application_command:
         return
 
-    if message.content.strip().lower() != "/call":
+    # só quando o nome do comando for "call"
+    if interaction.data.get("name") != "call":
         return
 
-    if message.channel.id != CALL_CHANNEL_ID:
+    # só no canal correto
+    if interaction.channel_id != CALL_CHANNEL_ID:
         return
 
-    guild = message.guild
-    user = message.author
+    guild = bot.get_guild(GUILD_ID)
+    member = interaction.user
 
-    role = discord.utils.get(guild.roles, name=ROLE_ENTREGADOR_NAME)
-    if not role:
-        await message.channel.send("❌ Cargo Entregador não encontrado.")
-        return
-
-    entregadores = [
-        m for m in guild.members
-        if role in m.roles and not m.bot
-    ]
+    role = discord.utils.get(guild.roles, name=ENTREGADOR_ROLE_NAME)
+    entregadores = [m for m in guild.members if role in m.roles and not m.bot]
 
     if not entregadores:
-        await message.channel.send("❌ Nenhum entregador disponível.")
+        await interaction.response.send_message(
+            "❌ Nenhum entregador disponível no momento.",
+            ephemeral=True
+        )
         return
 
     entregador = random.choice(entregadores)
 
-    category = discord.utils.get(guild.categories, name=CATEGORY_NAME)
-    if not category:
-        category = await guild.create_category(CATEGORY_NAME)
-
+    # cria o canal privado
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        member: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         entregador: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(view_channel=True)
     }
 
     channel = await guild.create_text_channel(
-        name=f"ticket-{user.name}",
-        category=category,
+        name=f"ticket-{member.name}".lower(),
         overwrites=overwrites
     )
 
+    await interaction.response.send_message(
+        "✅ Veja os chats",
+        ephemeral=True
+    )
+
     await channel.send(
-        f"👋 {user.mention} | {entregador.mention}\n"
-        "**Chat privado aberto.**"
+        f"🎟️ **Ticket aberto**\n\n"
+        f"👤 Cliente: {member.mention}\n"
+        f"📦 Entregador: {entregador.mention}\n\n"
+        f"Conversem aqui."
     )
 
 bot.run(TOKEN)
